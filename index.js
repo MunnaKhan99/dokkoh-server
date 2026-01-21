@@ -22,60 +22,86 @@ const client = new MongoClient(uri, {
 });
 
 async function run() {
-    // try {
+    try {
+        await client.connect(); // ✅ IMPORTANT
 
-    //     const gymSchedule = client.db('gymSchedule').collection('schedule')
-    //     app.post('/schedule', async (req, res) => {
-    //         const data = req.body;
-    //         const result = await gymSchedule.insertOne(data);
-    //         console.log(req.body);
-    //         res.send(result)
-    //     })
+        const db = client.db('dokkhoDB');
+        const usersCollection = db.collection("users");
+        const providersCollection = db.collection("providers");
 
-    //     app.get('/schedule', async (req, res) => {
-    //         const { searchParams } = req.query;
-    //         let query = {}
-    //         if (searchParams) {
-    //             query = { title: { $regex: searchParams, $options: "i" } };
-    //         }
-    //         const result = await gymSchedule.find(query).toArray();
-    //         res.send(result);
-    //     })
+        app.post("/providers", async (req, res) => {
+            try {
+                const { user, providerData } = req.body;
 
-    //     app.delete("/schedule/:id", async (req, res) => {
-    //         const id = req.params.id;
-    //         const query = { _id: new ObjectId(id) }
-    //         const result = await gymSchedule.deleteOne(query);
-    //         res.send(result)
-    //     })
-    //     app.get("/schedule/:id", async (req, res) => {
-    //         const id = req.params.id;
-    //         const query = { _id: new ObjectId(id) }
-    //         const result = await gymSchedule.findOne(query);
-    //         res.send(result)
-    //     })
-    //     app.put("/schedule/:id", async (req, res) => {
-    //         const id = req.params.id;
-    //         const { title, date, day, time } = req.body;
-    //         const query = { _id: new ObjectId(id) };
-    //         const updatedData = {
-    //             $set: {
-    //                 title,
-    //                 date,
-    //                 day,
-    //                 time
-    //             }
-    //         }
-    //         const result = await gymSchedule.updateOne(query, updatedData);
-    //         res.send(result)
-    //     })
+                // ✅ basic validation
+                if (!user?.uid) {
+                    return res.status(400).send({ message: "Invalid user data" });
+                }
 
-    //     await client.db("admin").command({ ping: 1 });
-    //     console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    // } finally {
+                // 1️⃣ Find or create user
+                let existingUser = await usersCollection.findOne({ uid: user.uid });
 
-    // }
+                if (!existingUser) {
+                    const userDoc = {
+                        uid: user.uid,
+                        phoneNumber: user.phoneNumber,
+                        metadata: user.metadata,
+                        reloadUserInfo: user.reloadUserInfo,
+                        role: "provider",
+                        createdAt: new Date(),
+                    };
+
+                    const userResult = await usersCollection.insertOne(userDoc);
+                    existingUser = { _id: userResult.insertedId };
+                }
+
+                // 2️⃣ Prevent duplicate provider
+                const alreadyProvider = await providersCollection.findOne({
+                    userId: existingUser._id,
+                });
+
+                if (alreadyProvider) {
+                    return res.send({
+                        success: true,
+                        providerId: alreadyProvider._id,
+                        message: "Provider already exists",
+                    });
+                }
+
+                // 3️⃣ Create provider profile
+                const providerDoc = {
+                    userId: existingUser._id,
+                    name: providerData.name,
+                    service: providerData.service,
+                    location: providerData.location,
+                    areaOnly: providerData.areaOnly,
+                    contact: providerData.contact,
+                    availability: true,
+                    createdAt: new Date(),
+                };
+
+                const providerResult = await providersCollection.insertOne(providerDoc);
+
+                res.send({
+                    success: true,
+                    providerId: providerResult.insertedId,
+                });
+
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Failed to save provider" });
+            }
+        });
+
+
+        await client.db("admin").command({ ping: 1 });
+        console.log("MongoDB connected successfully");
+
+    } catch (err) {
+        console.error(err);
+    }
 }
+
 
 run().catch(console.dir);
 app.get('/', (req, res) => {
