@@ -92,6 +92,61 @@ async function run() {
                 res.status(500).send({ message: "Failed to save provider" });
             }
         });
+        app.get("/providers/by-uid/:uid", async (req, res) => {
+            try {
+                const { uid } = req.params;
+
+                const user = await usersCollection.findOne({ uid });
+                if (!user) {
+                    return res.status(404).send({ message: "User not found" });
+                }
+
+                const provider = await providersCollection.findOne({
+                    userId: user._id,
+                });
+
+                if (!provider) {
+                    return res.status(404).send({ message: "Provider not found" });
+                }
+
+                res.send(provider);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Failed to fetch provider" });
+            }
+        });
+
+        app.patch("/providers/:id/availability", async (req, res) => {
+            try {
+                const { id } = req.params;
+                const { availability } = req.body;
+
+                const result = await providersCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { availability } }
+                );
+
+                res.send({ success: true, availability });
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Failed to update availability" });
+            }
+        });
+        app.post("/logout", async (req, res) => {
+            try {
+                // future: token blacklist / audit log
+                res.send({
+                    success: true,
+                    message: "Logged out successfully",
+                });
+            } catch (error) {
+                res.status(500).send({
+                    success: false,
+                    message: "Logout failed",
+                });
+            }
+        });
+
 
 
         await client.db("admin").command({ ping: 1 });
