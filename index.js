@@ -29,6 +29,48 @@ async function run() {
         const usersCollection = db.collection("users");
         const providersCollection = db.collection("providers");
 
+        app.patch("/users/:uid/customer-role", async (req, res) => {
+            try {
+                const { uid } = req.params;
+                const { phoneNumber } = req.body;
+
+                if (!uid) {
+                    return res.status(400).json({ success: false, message: "UID missing" });
+                }
+
+                const updateDoc = {
+                    $set: {
+                        "roles.customer": true,
+                    },
+                    $setOnInsert: {
+                        uid,
+                        createdAt: new Date(),
+                    },
+                };
+
+                // ✅ save phoneNumber if provided
+                if (phoneNumber) {
+                    updateDoc.$set.phoneNumber = phoneNumber;
+                }
+
+                const result = await usersCollection.updateOne(
+                    { uid },
+                    updateDoc,
+                    { upsert: true }
+                );
+
+                res.status(200).json({ success: true });
+            } catch (error) {
+                console.error("❌ customer-role ERROR:", error);
+                res.status(500).json({
+                    success: false,
+                    message: "Customer role update failed",
+                    error: error.message,
+                });
+            }
+        });
+
+
         app.post("/providers", async (req, res) => {
             try {
                 const { user, providerData } = req.body;
@@ -47,12 +89,12 @@ async function run() {
                         phoneNumber: user.phoneNumber,
                         metadata: user.metadata,
                         reloadUserInfo: user.reloadUserInfo,
-                        role: "provider",
+                        roles: { customer: true },
                         createdAt: new Date(),
                     };
 
-                    const userResult = await usersCollection.insertOne(userDoc);
-                    existingUser = { _id: userResult.insertedId };
+                    const result = await usersCollection.insertOne(userDoc);
+                    existingUser = { _id: result.insertedId };
                 }
 
                 // 2️⃣ Prevent duplicate provider
@@ -81,7 +123,10 @@ async function run() {
                 };
 
                 const providerResult = await providersCollection.insertOne(providerDoc);
-
+                await usersCollection.updateOne(
+                    { _id: existingUser._id },
+                    { $set: { "roles.provider": true } }
+                );
                 res.send({
                     success: true,
                     providerId: providerResult.insertedId,
@@ -98,7 +143,10 @@ async function run() {
 
                 const user = await usersCollection.findOne({ uid });
                 if (!user) {
-                    return res.status(404).send({ message: "User not found" });
+                    return res.status(200).send({
+                        exists: false,
+                        provider: null,
+                    });
                 }
 
                 const provider = await providersCollection.findOne({
@@ -106,22 +154,29 @@ async function run() {
                 });
 
                 if (!provider) {
-                    return res.status(404).send({ message: "Provider not found" });
+                    return res.status(200).send({
+                        exists: false,
+                        provider: null,
+                    });
                 }
 
-                res.send(provider);
+                res.status(200).send({
+                    exists: true,
+                    provider,
+                });
             } catch (error) {
                 console.error(error);
                 res.status(500).send({ message: "Failed to fetch provider" });
             }
         });
 
+
         app.patch("/providers/:id/availability", async (req, res) => {
             try {
                 const { id } = req.params;
                 const { availability } = req.body;
 
-                const result = await providersCollection.updateOne(
+                await providersCollection.updateOne(
                     { _id: new ObjectId(id) },
                     { $set: { availability } }
                 );
