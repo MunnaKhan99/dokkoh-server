@@ -123,7 +123,9 @@ async function run() {
                     phoneNumber: existingUser.phoneNumber,
                     serviceKey: providerData.service, // electrician
                     serviceName: serviceMap[providerData.service], // ইলেক্ট্রিশিয়ান
-                    location: providerData.location,
+                    locationParent: providerData.locationParent,
+                    locationSub: providerData.locationSub || null,
+
                     areaOnly: providerData.areaOnly,
                     contact: providerData.contact,
                     experience: providerData.experience,     // total reviewers
