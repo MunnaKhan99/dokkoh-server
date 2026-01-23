@@ -153,12 +153,16 @@ async function run() {
         //fetch  all providers by service key
         app.get("/providers", async (req, res) => {
             try {
-                const { service } = req.query;
+                const { service, locationParent } = req.query;
 
                 const filter = { availability: true };
 
                 if (service) {
                     filter.serviceKey = service;
+                }
+
+                if (locationParent) {
+                    filter.locationParent = locationParent;
                 }
 
                 const providers = await providersCollection
@@ -168,10 +172,10 @@ async function run() {
 
                 res.send(providers);
             } catch (error) {
-                console.error(error);
                 res.status(500).send({ message: "Failed to fetch providers" });
             }
         });
+
         //fetch provider data by using uid
         app.get("/providers/by-uid/:uid", async (req, res) => {
             try {
