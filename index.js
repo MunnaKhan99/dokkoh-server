@@ -20,6 +20,12 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+const serviceMap = {
+    electrician: "ইলেক্ট্রিশিয়ান",
+    plumber: "প্লাম্বার",
+    tutor: "হোম টিউটর",
+    others: "অন্যান্য",
+};
 
 async function run() {
     try {
@@ -28,7 +34,7 @@ async function run() {
         const db = client.db('dokkhoDB');
         const usersCollection = db.collection("users");
         const providersCollection = db.collection("providers");
-
+        // update customer role where user can be customer and also be a provider
         app.patch("/users/:uid/customer-role", async (req, res) => {
             try {
                 const { uid } = req.params;
@@ -70,7 +76,7 @@ async function run() {
             }
         });
 
-
+        // post the provider data in db
         app.post("/providers", async (req, res) => {
             try {
                 const { user, providerData } = req.body;
@@ -114,10 +120,15 @@ async function run() {
                 const providerDoc = {
                     userId: existingUser._id,
                     name: providerData.name,
-                    service: providerData.service,
+                    phoneNumber: existingUser.phoneNumber,
+                    serviceKey: providerData.service, // electrician
+                    serviceName: serviceMap[providerData.service], // ইলেক্ট্রিশিয়ান
                     location: providerData.location,
                     areaOnly: providerData.areaOnly,
                     contact: providerData.contact,
+                    experience: providerData.experience,     // total reviewers
+                    rating: 0.0,          // average rating
+                    ratingCount: 0,
                     availability: true,
                     createdAt: new Date(),
                 };
@@ -137,6 +148,29 @@ async function run() {
                 res.status(500).send({ message: "Failed to save provider" });
             }
         });
+        //fetch  all providers by service key
+        app.get("/providers", async (req, res) => {
+            try {
+                const { service } = req.query;
+
+                const filter = { availability: true };
+
+                if (service) {
+                    filter.serviceKey = service;
+                }
+
+                const providers = await providersCollection
+                    .find(filter)
+                    .sort({ rating: -1 })
+                    .toArray();
+
+                res.send(providers);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Failed to fetch providers" });
+            }
+        });
+        //fetch provider data by using uid
         app.get("/providers/by-uid/:uid", async (req, res) => {
             try {
                 const { uid } = req.params;
@@ -170,6 +204,30 @@ async function run() {
             }
         });
 
+        //fetch single provider by id: 
+        app.get("/providers/:id", async (req, res) => {
+            try {
+                const { id } = req.params;
+
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).send({ message: "Invalid provider id" });
+                }
+
+                const provider = await providersCollection.findOne({
+                    _id: new ObjectId(id),
+                    availability: true,
+                });
+
+                if (!provider) {
+                    return res.status(404).send({ message: "Provider not found" });
+                }
+
+                res.send(provider);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Failed to fetch provider details" });
+            }
+        });
 
         app.patch("/providers/:id/availability", async (req, res) => {
             try {
