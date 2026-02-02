@@ -24,20 +24,25 @@ const client = new MongoClient(uri, {
 let usersCollection, providersCollection, reviewsCollection;
 
 // MongoDB Connection Helper
-async function connectDB() {
-    if (usersCollection && providersCollection && reviewsCollection) return; // আগেই কানেক্ট থাকলে নতুন করে করবে না
-    try {
-        await client.connect();
-        const db = client.db('dokkhoDB');
-        usersCollection = db.collection("users");
-        providersCollection = db.collection("providers");
-        reviewsCollection = db.collection("reviews");
+let cachedClient = null;
+let cachedDb = null;
 
-        console.log("✅ MongoDB connected successfully");
-    } catch (err) {
-        console.error("❌ MongoDB connection error:", err);
-    }
+async function connectDB() {
+    if (cachedDb) return;
+
+    const client = new MongoClient(process.env.MONGO_URI);
+    await client.connect();
+
+    const db = client.db("dokkhoDB");
+    cachedDb = db;
+
+    usersCollection = db.collection("users");
+    providersCollection = db.collection("providers");
+    reviewsCollection = db.collection("reviews");
+
+    console.log("✅ MongoDB connected (cached)");
 }
+
 
 const serviceMap = {
     electrician: "ইলেক্ট্রিশিয়ান",
