@@ -21,16 +21,18 @@ const client = new MongoClient(uri, {
 });
 
 // Database Collections (Global Variables)
-let usersCollection, providersCollection;
+let usersCollection, providersCollection, reviewsCollection;
 
 // MongoDB Connection Helper
 async function connectDB() {
-    if (usersCollection && providersCollection) return; // আগেই কানেক্ট থাকলে নতুন করে করবে না
+    if (usersCollection && providersCollection && reviewsCollection) return; // আগেই কানেক্ট থাকলে নতুন করে করবে না
     try {
         await client.connect();
         const db = client.db('dokkhoDB');
         usersCollection = db.collection("users");
         providersCollection = db.collection("providers");
+        reviewsCollection = db.collection("reviews");
+
         console.log("✅ MongoDB connected successfully");
     } catch (err) {
         console.error("❌ MongoDB connection error:", err);
@@ -188,7 +190,76 @@ app.patch("/providers/:id/availability", async (req, res) => {
     }
 });
 
-// 7. Logout
+// 9. review
+app.post("/reviews", async (req, res) => {
+    try {
+        await connectDB()
+        const { providerId, rating, comment, userName, userId } = req.body;
+        if (!providerId || !rating || !userId) {
+            return res.status(400).send({ message: "Invalid review data" });
+        }
+
+        // চেক করুন বডি খালি কিনা
+        if (!providerId) {
+            return res.status(400).send({ message: "Provider ID missing" });
+        }
+
+        const reviewDoc = {
+            providerId: new ObjectId(providerId),
+            userId,
+            userName,
+            rating: parseFloat(rating),
+            comment,
+            createdAt: new Date(),
+        };
+        await reviewsCollection.insertOne(reviewDoc);
+
+        const provider = await providersCollection.findOne({ _id: new ObjectId(providerId) });
+
+        const currentRating = provider.rating || 0;
+        const currentRatingCount = provider.ratingCount || 0;
+
+        // সঠিক ক্যালকুলেশন
+        const newCount = currentRatingCount + 1;
+        const newRating = ((currentRating * currentRatingCount) + parseFloat(rating)) / newCount;
+
+        await providersCollection.updateOne(
+            { _id: new ObjectId(providerId) },
+            {
+                $set: {
+                    rating: parseFloat(newRating.toFixed(1)),
+                    ratingCount: newCount
+                }
+            }
+        );
+        res.status(200).send({ success: true, message: "Review added successfully" });
+    } catch (error) {
+        res.status(500).send({ message: "Review submit failed", error: error.message });
+    }
+});
+
+//get review:
+// GET latest reviews for a provider
+app.get("/reviews/provider/:id", async (req, res) => {
+    try {
+        await connectDB();
+        const { id } = req.params;
+        const limit = parseInt(req.query.limit) || 3;
+
+        const reviews = await reviewsCollection
+            .find({ providerId: new ObjectId(id) })
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .toArray();
+
+        res.send(reviews);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to fetch reviews" });
+    }
+});
+
+
+// 8. Logout
 app.post("/logout", (req, res) => {
     res.send({ success: true, message: "Logged out" });
 });
