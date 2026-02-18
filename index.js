@@ -108,8 +108,8 @@ app.post('/jwt', async (req, res) => {
         res.cookie("token", token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "none",
-            maxAge: 24 * 60 * 60 * 1000, // 1 day
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            maxAge: 24 * 60 * 60 * 1000,
         }).send({ success: true });
 
     } catch (error) {
@@ -123,15 +123,15 @@ app.post('/jwt', async (req, res) => {
 // 1. Update/Ensure Customer Role
 app.patch("/users/:uid/customer-role", verifyToken, async (req, res) => {
     try {
-        if (req.user.uid !== req.params.uid) {
-            return res.status(403).send({ message: "Forbidden" });
-        }
         await connectDB();
         const { uid } = req.params;
         const { phoneNumber } = req.body;
 
         if (!uid) return res.status(400).json({ success: false, message: "UID missing" });
 
+        if (req.user.uid !== uid) {
+            return res.status(403).json({ success: false, message: "Forbidden" });
+        }
         const updateDoc = {
             $set: { "roles.customer": true },
             $setOnInsert: { uid, createdAt: new Date() },
