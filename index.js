@@ -231,6 +231,81 @@ app.get("/providers", async (req, res) => {
         res.status(500).send({ message: "Failed to fetch providers" });
     }
 });
+// 3A. Fetch Nearby Providers (3 different categories)
+app.get("/providers/nearby", async (req, res) => {
+    try {
+        await connectDB();
+        const { locationParent } = req.query;
+
+        if (!locationParent) {
+            return res.status(400).send({ message: "locationParent is required" });
+        }
+
+        const providers = await providersCollection.aggregate([
+            {
+                $match: {
+                    availability: true,
+                    locationParent: locationParent
+                    // kycStatus: "approved", // 🚫 এখন সরাও
+                }
+            },
+            { $sort: { rating: -1, createdAt: -1 } },
+            {
+                $group: {
+                    _id: "$serviceKey",
+                    provider: { $first: "$$ROOT" }
+                }
+            },
+            { $replaceRoot: { newRoot: "$provider" } },
+            { $sample: { size: 3 } },
+            {
+                $project: {
+                    phoneNumber: 0,
+                    kyc: 0,
+                    contact: 0
+                }
+            }
+        ]).toArray();
+
+        res.send(providers);
+    } catch (error) {
+        console.error("GET /providers/nearby error:", error);
+        res.status(500).send({ message: "Failed to fetch nearby providers" });
+    }
+});
+// Get Logged-in User Profile (Customer / Provider)
+app.get("/users/me", verifyToken, async (req, res) => {
+    try {
+        await connectDB();
+
+        const uid = req.user.uid;
+
+        const user = await usersCollection.findOne({ uid });
+
+        if (!user) {
+            return res.status(404).send({ message: "User not found" });
+        }
+
+        // যদি provider হয়, provider profile থেকেও নাম ও ইমেজ নেবো
+        let providerProfile = null;
+        if (user.roles?.provider) {
+            providerProfile = await providersCollection.findOne({ userId: user._id });
+        }
+
+        res.send({
+            uid: user.uid,
+            phoneNumber: user.phoneNumber,
+            role: user.roles,
+            name: providerProfile?.name || user.name || null,
+            profileImage: providerProfile?.profileImage || user.profileImage || null
+        });
+    } catch (error) {
+        console.error("GET /users/me error:", error);
+        res.status(500).send({ message: "Failed to fetch user profile" });
+    }
+});
+
+
 
 // 4. Fetch Provider by UID
 app.get("/providers/by-uid/:uid", verifyToken, async (req, res) => {
