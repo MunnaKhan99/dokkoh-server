@@ -107,10 +107,11 @@ app.post('/jwt', async (req, res) => {
 
         res.cookie("token", token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            secure: true,          // Vercel এ অবশ্যই true
+            sameSite: "none",     // cross-site cookie
             maxAge: 24 * 60 * 60 * 1000,
         }).send({ success: true });
+
 
     } catch (error) {
         console.error("JWT issue:", error.message);
@@ -240,7 +241,9 @@ app.get("/providers/nearby", async (req, res) => {
         if (!locationParent) {
             return res.status(400).send({ message: "locationParent is required" });
         }
-
+        if (!locationParent || locationParent === "null" || locationParent === "undefined") {
+            return res.status(200).send([]);   // empty list instead of 400
+        }
         const providers = await providersCollection.aggregate([
             {
                 $match: {
@@ -445,8 +448,7 @@ app.get("/reviews/provider/:id", async (req, res) => {
 // 8. Logout
 app.post('/logout', (req, res) => {
     res.clearCookie('token', {
-        maxAge: 0,
-        secure: process.env.NODE_ENV === 'production',
+        secure: true,
         sameSite: "none"
     })
         .send({ success: true });
